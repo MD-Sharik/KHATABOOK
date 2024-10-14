@@ -13,11 +13,14 @@ const Signup = () => {
 
   const handleSignup = async () => {
     try {
-      const response = await axios.post("http://localhost:3000/signup", {
-        email,
-        phone_number,
-        name,
-      });
+      const response = await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}signup`,
+        {
+          email,
+          phone_number,
+          name,
+        }
+      );
 
       const { token } = response.data;
       localStorage.setItem("token", token);

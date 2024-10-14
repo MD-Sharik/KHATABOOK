@@ -10,7 +10,9 @@ const AllUsers = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await axios.get("http://localhost:3000/allusers");
+        const response = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/allusers`
+        );
         console.log(response.data);
         setUsers(response.data);
       } catch (error) {

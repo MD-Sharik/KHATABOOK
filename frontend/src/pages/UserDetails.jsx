@@ -31,7 +31,9 @@ const UserDetail = () => {
       try {
         const token = localStorage.getItem("token");
         const response = await axios.get(
-          `http://localhost:3000/books/${bookId}/users/${userId}/accounting`,
+          `${
+            import.meta.env.VITE_BACKEND_URL
+          }/${bookId}/users/${userId}/accounting`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setTransactions(response.data.transactions);
@@ -56,7 +58,7 @@ const UserDetail = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await axios.post(
-        `http://localhost:3000/users/${userId}/accounting`,
+        `${import.meta.env.VITE_BACKEND_URL}/${userId}/accounting`,
         {
           amount: amountToSend,
           type: transactionType,

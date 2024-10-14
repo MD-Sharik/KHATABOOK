@@ -17,7 +17,7 @@ const BookDetail = () => {
       try {
         const token = localStorage.getItem("token");
         const response = await axios.get(
-          `http://localhost:3000/books/${bookId}`,
+          `${import.meta.env.VITE_BACKEND_URL}/books/${bookId}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -54,7 +54,7 @@ const BookDetail = () => {
       try {
         const token = localStorage.getItem("token");
         const response = await axios.post(
-          `http://localhost:3000/books/${bookId}/users`,
+          `${import.meta.env.VITE_BACKEND_URL}/books/${bookId}/users`,
           { name: newUserName },
           {
             headers: { Authorization: `Bearer ${token}` },

@@ -21,9 +21,12 @@ const Dashboard = () => {
   const fetchBooks = async () => {
     const token = localStorage.getItem("token");
     try {
-      const response = await axios.get("http://localhost:3000/books", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/books`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       console.log("Fetched Books:", response.data);
       setBooks(response.data);
       setLoading(false);

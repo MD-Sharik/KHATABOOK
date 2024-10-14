@@ -24,10 +24,13 @@ const Login = () => {
     setError(""); // Reset error message
 
     try {
-      const response = await axios.post("http://localhost:3000/login", {
-        email,
-        phone_number,
-      });
+      const response = await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/login`,
+        {
+          email,
+          phone_number,
+        }
+      );
       const { userId, token, name } = response.data;
 
       // Store user details in local storage
