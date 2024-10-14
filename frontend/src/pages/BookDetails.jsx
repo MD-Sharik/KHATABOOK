@@ -87,15 +87,17 @@ const BookDetail = () => {
     <div className="min-h-[92.4vh] bg-gray-100 p-8">
       <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-8">
         <div className="flex justify-between">
-          <h1 className="text-3xl font-bold mb-2 text-gray-800">{book.name}</h1>
-          <div className="text-2xl font-bold mb-2">
+          <h1 className="md:text-3xl text-xl font-bold mb-2 text-gray-800">
+            {book.name}
+          </h1>
+          <div className="md:text-2xl text-xl font-bold mb-2">
             Total:{" "}
             <span
               className={`${
                 grandTally >= 0 ? "text-green-600" : "text-red-600"
               }`}
             >
-              {grandTally.toFixed(2)}
+              {`₹(${grandTally.toFixed(2)})`}
             </span>
           </div>
         </div>

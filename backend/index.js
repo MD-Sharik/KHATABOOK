@@ -156,10 +156,15 @@ app.get(
 
     try {
       const result = await pool.query(
-        "SELECT * FROM books WHERE user_id = $1",
+        `SELECT b.*, json_agg(t) AS transactions 
+         FROM books b
+         LEFT JOIN transactions t ON b.id = t.book_id 
+         WHERE b.user_id = $1 
+         GROUP BY b.id;`,
         [userId]
       );
-      res.json(result.rows); // Respond with all books for the user
+
+      res.json(result.rows); // Respond with all books and their transactions
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: "Failed to fetch books", error });
@@ -167,49 +172,6 @@ app.get(
   }
 );
 
-// Fetch a specific book by its ID
-// app.get(
-//   "/books/:bookId",
-//   passport.authenticate("jwt", { session: false }),
-//   async (req, res) => {
-//     const { bookId } = req.params;
-//     const userId = req.user.id;
-
-//     try {
-//       // Fetch the book details
-//       const bookResult = await pool.query(
-//         "SELECT * FROM books WHERE id = $1 AND user_id = $2",
-//         [bookId, userId]
-//       );
-
-//       // Fetch associated participants for the book
-//       const usersResult = await pool.query(
-//         "SELECT u.* FROM users u JOIN participants p ON u.id = p.user_id WHERE p.book_id = $1",
-//         [bookId]
-//       );
-
-//       // Fetch associated transactions for the book
-//       const transactionsResult = await pool.query(
-//         "SELECT * FROM transactions WHERE book_id = $1",
-//         [bookId]
-//       );
-
-//       if (bookResult.rows.length > 0) {
-//         const book = bookResult.rows[0];
-//         res.json({
-//           book,
-//           users: usersResult.rows,
-//           transactions: transactionsResult.rows,
-//         });
-//       } else {
-//         res.status(404).json({ error: "Book not found" });
-//       }
-//     } catch (error) {
-//       console.error(error);
-//       res.status(500).json({ error: "Failed to fetch book details" });
-//     }
-//   }
-// );
 app.get(
   "/books/:bookId",
   passport.authenticate("jwt", { session: false }),
@@ -258,44 +220,6 @@ app.get(
     }
   }
 );
-
-// Get accounting details for a specific user in a book
-// app.get(
-//   "/books/:bookId/users/:userId",
-//   passport.authenticate("jwt", { session: false }),
-//   async (req, res) => {
-//     const { bookId, userId } = req.params;
-
-//     try {
-//       // Fetch the user details
-//       const userResult = await pool.query("SELECT * FROM users WHERE id = $1", [
-//         userId,
-//       ]);
-
-//       // Fetch the transactions related to the user and book
-//       const transactionsResult = await pool.query(
-//         `SELECT * FROM transactions
-//          WHERE book_id = $1 AND (sender_id = $2 OR receiver_id = $2)`,
-//         [bookId, userId]
-//       );
-
-//       if (userResult.rows.length > 0) {
-//         const user = userResult.rows[0];
-//         res.json({
-//           user,
-//           transactions: transactionsResult.rows,
-//         });
-//       } else {
-//         res.status(404).json({ error: "User not found" });
-//       }
-//     } catch (error) {
-//       console.error("Error fetching user accounting details:", error);
-//       res
-//         .status(500)
-//         .json({ error: "Failed to fetch user accounting details" });
-//     }
-//   }
-// );
 
 // Get user accounting details for a specific book (user's transactions and tally)
 app.get(
@@ -470,14 +394,18 @@ app.post("/login", async (req, res) => {
 
     // Assume you have a way to verify the password
     // If password is valid, create a JWT token
-    const token = jwt.sign({ sub: user.id }, "huma1n@789", { expiresIn: "1h" });
+    const token = jwt.sign({ sub: user.id }, "huma1n@789");
 
-    res.json({ userId: user.id, token });
+    res.json({ userId: user.id, token, name: user.name });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
+// app.post("/delete/:bookId", (req, res) => {
+//   const { bookId } = req.params;
+// });
 
 // Start the server
 const PORT = 3000;

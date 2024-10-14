@@ -11,6 +11,7 @@ const AllUsers = () => {
     const fetchUsers = async () => {
       try {
         const response = await axios.get("http://localhost:3000/allusers");
+        console.log(response.data);
         setUsers(response.data);
       } catch (error) {
         console.error("Error fetching users:", error);
@@ -31,14 +32,19 @@ const AllUsers = () => {
         All Users
       </h1>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {users.map((user) => (
+        {users.map((user, i) => (
           <div
-            key={user.id}
+            key={i}
             className="bg-white rounded-lg shadow-md p-4 transition-transform transform hover:scale-105"
           >
-            <h2 className="text-xl font-semibold text-gray-800">{user.name}</h2>
-            <p className="text-gray-600">{user.email}</p>
-            <p className="text-gray-600">{user.phone}</p>
+            <h2 className="text-xl font-semibold text-gray-800">
+              {user.name.toUpperCase()}
+            </h2>
+            <p className="text-gray-600 font-medium">ID: {user.id}</p>
+            <p className="text-gray-600 font-medium">Email: {user.email}</p>
+            <p className="text-gray-600 font-medium">
+              Phone: {user.phone_number}
+            </p>
           </div>
         ))}
       </div>

@@ -33,14 +33,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/allusers"
-          element={
-            <ProtectedRoute>
-              <AllUsers />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/allusers" element={<AllUsers />} />
         <Route
           path="/addbooks/:userId"
           element={
