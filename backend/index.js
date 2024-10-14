@@ -408,7 +408,9 @@ app.post("/login", async (req, res) => {
 // });
 
 // Start the server
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+// const PORT = 3000;
+app.listen(process.env.PORT_SERVER || 5000, () => {
+  console.log(
+    `Server is running on http://localhost:${process.env.PORT_SERVER}`
+  );
 });
