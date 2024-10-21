@@ -5,6 +5,7 @@ import useBack from "../hooks/useBack.jsx";
 const Signup = () => {
   const [email, setEmail] = useState("");
   const [phone_number, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const back = useBack();
 
@@ -14,6 +15,7 @@ const Signup = () => {
         email,
         phone_number,
         name,
+        password,
       });
 
       // Assuming your backend response returns an object like { user: ..., token: "..." }
@@ -37,9 +39,21 @@ const Signup = () => {
         <h1 className="text-2xl font-bold mb-4">Signup</h1>
         <input
           className="border rounded w-full p-2 mb-4"
+          placeholder="Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <input
+          className="border rounded w-full p-2 mb-4"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+        />
+        <input
+          className="border rounded w-full p-2 mb-4"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
         />
         <input
           className="border rounded w-full p-2 mb-4"
@@ -47,12 +61,7 @@ const Signup = () => {
           value={phone_number}
           onChange={(e) => setPhone(e.target.value)}
         />
-        <input
-          className="border rounded w-full p-2 mb-4"
-          placeholder="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+
         <button
           onClick={handleSignup}
           className="bg-blue-500 text-white py-2 px-4 rounded"

@@ -8,6 +8,7 @@ const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const app = express();
+const bcrypt = require("bcrypt");
 app.use(bodyParser.json());
 
 dotenv.config();
@@ -18,6 +19,10 @@ const pool = new Pool({
   database: process.env.DATABASE,
   password: process.env.PASSWORD,
   port: process.env.PORT,
+  ssl: {
+    rejectUnauthorized: false,
+    sslmode: "require",
+  },
 });
 
 // CORS options
@@ -26,6 +31,23 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (!token) {
+    return res.status(401).json({ message: "Token missing" });
+  }
+
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: "Invalid token" });
+    }
+    req.user = user; // Attach user object to the request
+    next();
+  });
+};
 
 // JWT Authentication Setup
 const getUserById = async (id) => {
@@ -80,20 +102,41 @@ app.get("/", async (req, res) => {
   }
 });
 
-// User Signup
+// User Signupconst bcrypt = require('bcrypt');
+
 app.post("/signup", async (req, res) => {
-  const { email, phone_number, name } = req.body; // Updated to use phone_number
+  const { email, phone_number, name, password } = req.body;
 
   try {
+    // Hash the password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Insert the new user into the database
     const result = await pool.query(
-      "INSERT INTO users (email, phone_number, name) VALUES ($1, $2, $3) RETURNING *",
-      [email, phone_number, name] // Updated to use phone_number
+      "INSERT INTO users (email, phone_number, name, password) VALUES ($1, $2, $3, $4) RETURNING id, email, phone_number, name",
+      [email, phone_number, name, hashedPassword]
     );
 
-    res.json(result.rows[0]); // Only respond with the created user info
+    const newUser = result.rows[0];
+
+    // Generate a JWT token
+    const token = jwt.sign({ sub: newUser.id }, "huma1n@789", {});
+
+    // Respond with the user info and token
+    res.status(201).json({
+      user: newUser,
+      token: token,
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Failed to create user", error });
+    if (error.constraint === "users_email_key") {
+      res.status(400).json({ error: "Email already exists" });
+    } else if (error.constraint === "users_phone_number_key") {
+      res.status(400).json({ error: "Phone number already exists" });
+    } else {
+      res.status(500).json({ error: "Failed to create user" });
+    }
   }
 });
 
@@ -117,6 +160,114 @@ app.post(
     }
   }
 );
+
+app.post("/books/:bookId/invite", async (req, res) => {
+  const { bookId } = req.params;
+  const { email } = req.body;
+  const inviterId = req.user.id; // Assuming you're using JWT and have a user object attached to req
+
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+
+  try {
+    // Check if the user already exists
+    const userResult = await pool.query(
+      `SELECT * FROM users WHERE email = $1`,
+      [email]
+    );
+    const user = userResult.rows[0];
+
+    if (user) {
+      // Check if the user is already a participant in the book
+      const participantResult = await pool.query(
+        `SELECT * FROM participants WHERE book_id = $1 AND user_id = $2`,
+        [bookId, user.id]
+      );
+      if (participantResult.rows.length > 0) {
+        return res
+          .status(400)
+          .json({ error: "User is already a participant in this book" });
+      }
+
+      // Add the user as a participant directly
+      await pool.query(
+        `INSERT INTO participants (book_id, user_id) VALUES ($1, $2)`,
+        [bookId, user.id]
+      );
+      return res.status(200).json({ message: "User added to the book", user });
+    } else {
+      // If the user doesn't exist, create an invitation
+      const inviteResult = await pool.query(
+        `INSERT INTO invitations (email, book_id, inviter_id, status, created_at) 
+         VALUES ($1, $2, $3, 'pending', NOW()) RETURNING *`,
+        [email, bookId, inviterId]
+      );
+      const invitation = inviteResult.rows[0];
+
+      // Send an invitation email
+      sendInvitationEmail(email, invitation);
+
+      return res.status(200).json({ message: "Invitation sent", invitation });
+    }
+  } catch (error) {
+    console.error("Error inviting user:", error);
+    return res
+      .status(500)
+      .json({ error: "An error occurred while sending the invitation" });
+  }
+});
+
+// Add Dummy User Route
+app.post(
+  "/books/:bookId/dummy_users",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res) => {
+    const { bookId } = req.params;
+    const { name } = req.body;
+
+    try {
+      // Insert dummy user into the dummy_users table
+      const result = await pool.query(
+        "INSERT INTO dummy_users (name, book_id) VALUES ($1, $2) RETURNING *",
+        [name, bookId]
+      );
+
+      const dummyUser = result.rows[0];
+
+      // Add dummy user as a participant in the book
+      await pool.query(
+        "INSERT INTO participants (user_id, book_id) VALUES ($1, $2)",
+        [dummyUser.id, bookId]
+      );
+
+      res.status(201).json(dummyUser);
+    } catch (error) {
+      console.error("Error adding dummy user:", error);
+      res.status(500).json({ error: "Failed to add dummy user" });
+    }
+  }
+);
+
+app.post("/deleteBook", async (req, res) => {
+  const { bookId } = req.body;
+
+  try {
+    // First delete from related tables
+    await pool.query("DELETE FROM transactions WHERE book_id = $1", [bookId]);
+    await pool.query("DELETE FROM participants WHERE book_id = $1", [bookId]);
+    await pool.query("DELETE FROM invitations WHERE book_id = $1", [bookId]);
+    await pool.query("DELETE FROM dummy_users WHERE book_id = $1", [bookId]);
+
+    // Then delete the book itself
+    await pool.query("DELETE FROM books WHERE id = $1", [bookId]);
+
+    return res.status(200).json({ message: `Deleted Book` });
+  } catch (error) {
+    console.error("Error deleting book:", error);
+    res.status(500).json({ error: "Failed to delete book" });
+  }
+});
 
 // Endpoint to add a user to a book
 app.post(
@@ -167,49 +318,7 @@ app.get(
   }
 );
 
-// Fetch a specific book by its ID
-// app.get(
-//   "/books/:bookId",
-//   passport.authenticate("jwt", { session: false }),
-//   async (req, res) => {
-//     const { bookId } = req.params;
-//     const userId = req.user.id;
-
-//     try {
-//       // Fetch the book details
-//       const bookResult = await pool.query(
-//         "SELECT * FROM books WHERE id = $1 AND user_id = $2",
-//         [bookId, userId]
-//       );
-
-//       // Fetch associated participants for the book
-//       const usersResult = await pool.query(
-//         "SELECT u.* FROM users u JOIN participants p ON u.id = p.user_id WHERE p.book_id = $1",
-//         [bookId]
-//       );
-
-//       // Fetch associated transactions for the book
-//       const transactionsResult = await pool.query(
-//         "SELECT * FROM transactions WHERE book_id = $1",
-//         [bookId]
-//       );
-
-//       if (bookResult.rows.length > 0) {
-//         const book = bookResult.rows[0];
-//         res.json({
-//           book,
-//           users: usersResult.rows,
-//           transactions: transactionsResult.rows,
-//         });
-//       } else {
-//         res.status(404).json({ error: "Book not found" });
-//       }
-//     } catch (error) {
-//       console.error(error);
-//       res.status(500).json({ error: "Failed to fetch book details" });
-//     }
-//   }
-// );
+// Fetch Specific Book of a specific user
 app.get(
   "/books/:bookId",
   passport.authenticate("jwt", { session: false }),
@@ -224,15 +333,65 @@ app.get(
         [bookId, userId]
       );
 
-      // Fetch associated participants for the book
+      // Fetch associated participants for the book, including the dummy user
+      // const usersResult = await pool.query(
+      //   `SELECT
+      //     CASE
+      //       WHEN u.id IS NOT NULL THEN u.id
+      //       ELSE d.id
+      //     END as id,
+      //     CASE
+      //       WHEN u.id IS NOT NULL THEN u.name
+      //       ELSE d.name
+      //     END as username,
+      //     CASE
+      //       WHEN u.id IS NOT NULL THEN u.email
+      //       ELSE concat('dummy-', d.id, '@example.com')
+      //     END as email,
+      //     COALESCE(SUM(CASE WHEN t.type = 'get' THEN t.amount ELSE -t.amount END), 0) as tally
+      //   FROM
+      //     (SELECT id, user_id FROM participants WHERE book_id = $1
+      //      UNION
+      //      SELECT id, id as user_id FROM dummy_users WHERE book_id = $1) p
+      //   LEFT JOIN users u ON p.user_id = u.id
+      //   LEFT JOIN dummy_users d ON p.id = d.id
+      //   LEFT JOIN transactions t ON (p.user_id = t.sender_id OR p.user_id = t.receiver_id) AND t.book_id = $1
+      //   GROUP BY
+      //     CASE WHEN u.id IS NOT NULL THEN u.id ELSE d.id END,
+      //     CASE WHEN u.id IS NOT NULL THEN u.name ELSE d.name END,
+      //     CASE WHEN u.id IS NOT NULL THEN u.email ELSE concat('dummy-', d.id, '@example.com') END`,
+      //   [bookId]
+      // );
+
       const usersResult = await pool.query(
-        `SELECT u.*, 
-                COALESCE(SUM(CASE WHEN t.type = 'get' THEN t.amount ELSE -t.amount END), 0) as tally
-         FROM users u
-         JOIN participants p ON u.id = p.user_id
-         LEFT JOIN transactions t ON (u.id = t.sender_id OR u.id = t.receiver_id) AND t.book_id = $1
-         WHERE p.book_id = $1
-         GROUP BY u.id`,
+        `SELECT 
+            CASE 
+              WHEN u.id IS NOT NULL THEN u.id 
+              ELSE d.id 
+            END as id,
+            CASE 
+              WHEN u.id IS NOT NULL THEN u.name 
+              ELSE d.name 
+            END as username,
+            CASE 
+              WHEN u.id IS NOT NULL THEN u.email 
+              ELSE concat('dummy-', d.id, '@example.com')
+            END as email,
+            COALESCE(SUM(CASE 
+              WHEN t.type = 'get' THEN t.amount 
+              ELSE -t.amount 
+            END), 0) as tally
+          FROM participants p
+          LEFT JOIN users u ON p.user_id = u.id
+          LEFT JOIN dummy_users d ON p.dummy_user_id = d.id
+          LEFT JOIN transactions t 
+            ON (p.user_id = t.sender_id OR p.user_id = t.receiver_id OR p.dummy_user_id = t.sender_id OR p.dummy_user_id = t.receiver_id) 
+            AND t.book_id = $1
+          WHERE p.book_id = $1
+          GROUP BY 
+            CASE WHEN u.id IS NOT NULL THEN u.id ELSE d.id END,
+            CASE WHEN u.id IS NOT NULL THEN u.name ELSE d.name END,
+            CASE WHEN u.id IS NOT NULL THEN u.email ELSE concat('dummy-', d.id, '@example.com') END`,
         [bookId]
       );
 
@@ -244,6 +403,7 @@ app.get(
 
       if (bookResult.rows.length > 0) {
         const book = bookResult.rows[0];
+
         res.json({
           book,
           users: usersResult.rows,
@@ -259,50 +419,13 @@ app.get(
   }
 );
 
-// Get accounting details for a specific user in a book
-// app.get(
-//   "/books/:bookId/users/:userId",
-//   passport.authenticate("jwt", { session: false }),
-//   async (req, res) => {
-//     const { bookId, userId } = req.params;
-
-//     try {
-//       // Fetch the user details
-//       const userResult = await pool.query("SELECT * FROM users WHERE id = $1", [
-//         userId,
-//       ]);
-
-//       // Fetch the transactions related to the user and book
-//       const transactionsResult = await pool.query(
-//         `SELECT * FROM transactions
-//          WHERE book_id = $1 AND (sender_id = $2 OR receiver_id = $2)`,
-//         [bookId, userId]
-//       );
-
-//       if (userResult.rows.length > 0) {
-//         const user = userResult.rows[0];
-//         res.json({
-//           user,
-//           transactions: transactionsResult.rows,
-//         });
-//       } else {
-//         res.status(404).json({ error: "User not found" });
-//       }
-//     } catch (error) {
-//       console.error("Error fetching user accounting details:", error);
-//       res
-//         .status(500)
-//         .json({ error: "Failed to fetch user accounting details" });
-//     }
-//   }
-// );
-
 // Get user accounting details for a specific book (user's transactions and tally)
 app.get(
   "/books/:bookId/users/:userId/accounting",
   passport.authenticate("jwt", { session: false }),
   async (req, res) => {
     const { bookId, userId } = req.params;
+    console.log(`Book ID: ${bookId}, User ID: ${userId}`);
 
     try {
       // Fetch all transactions related to this user and specific book
@@ -342,7 +465,7 @@ app.post(
   passport.authenticate("jwt", { session: false }),
   async (req, res) => {
     const { userId } = req.params;
-    const { amount, type, bookId, remarks } = req.body; // Expect bookId to be sent in the body
+    const { amount, type, bookId, remarks } = req.body;
 
     // Input validation
     if (!amount || typeof amount !== "number") {
@@ -354,11 +477,32 @@ app.post(
         .json({ error: "Type must be either 'give' or 'get'" });
     }
 
+    // Log request body for debugging
+    console.log("Request Body:", req.body);
+
     try {
+      const bookIdInt = parseInt(bookId, 10); // Ensure bookId is an integer
+      // Check if bookIdInt is a valid integer
+      if (isNaN(bookIdInt)) {
+        return res.status(400).json({ error: "Invalid bookId" });
+      }
+
+      // Check if sender is a participant in the book
+      const participantCheck = await pool.query(
+        "SELECT * FROM participants WHERE user_id = $1 AND book_id = $2",
+        [req.user.id, bookIdInt]
+      );
+
+      if (participantCheck.rowCount === 0) {
+        return res
+          .status(403)
+          .json({ error: "User not a participant in this book" });
+      }
+
       // Insert new transaction record
       const newTransaction = await pool.query(
-        "INSERT INTO transactions (book_id, sender_id, receiver_id, amount, type,remarks) VALUES ($1, $2, $3, $4, $5,$6) RETURNING *",
-        [bookId, req.user.id, userId, amount, type, remarks]
+        "INSERT INTO transactions (book_id, sender_id, receiver_id, amount, type, remarks) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+        [bookIdInt, req.user.id, userId, amount, type, remarks]
       );
 
       // Calculate total tally for the user
@@ -377,7 +521,6 @@ app.post(
   }
 );
 
-// Fetch a specific book by its ID, including user tallies
 // Fetch a specific book by its ID with user tallies
 app.get(
   "/books/:bookId",
@@ -454,13 +597,13 @@ app.get(
 
 // User Login
 app.post("/login", async (req, res) => {
-  const { email, phone_number } = req.body;
+  const { email, password } = req.body;
 
   try {
-    const result = await pool.query(
-      "SELECT * FROM users WHERE email = $1 AND phone_number = $2",
-      [email, phone_number]
-    );
+    // Fetch the user by email
+    const result = await pool.query("SELECT * FROM users WHERE email = $1", [
+      email,
+    ]);
 
     const user = result.rows[0];
 
@@ -468,9 +611,15 @@ app.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Assume you have a way to verify the password
+    // Compare the hashed password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
     // If password is valid, create a JWT token
-    const token = jwt.sign({ sub: user.id }, "huma1n@789", { expiresIn: "1h" });
+    const token = jwt.sign({ sub: user.id }, "huma1n@123");
 
     res.json({ userId: user.id, token });
   } catch (error) {

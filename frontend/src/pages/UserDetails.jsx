@@ -55,18 +55,20 @@ const UserDetail = () => {
     }
     try {
       const token = localStorage.getItem("token");
+      const userID = localStorage.getItem("userId"); // Ensure this is set correctly
       const response = await axios.post(
-        `http://localhost:3000/users/${userId}/accounting`,
+        `http://localhost:3000/users/${userId}/accounting`, // Correct API URL
         {
           amount: amountToSend,
           type: transactionType,
           remarks,
-          bookId: parseInt(bookId, 10),
+          bookId: bookId,
+          sender_Id: userID, // Pass the correct sender ID
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setTransactions([...transactions, response.data.transaction]);
-      setTally(response.data.tally);
+      setTally(response.data.updatedTally); // Use updatedTally from response
       closeModal();
     } catch (error) {
       console.error("Error updating transaction:", error);

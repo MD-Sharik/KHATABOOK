@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { Book, PlusCircle, Loader } from "lucide-react";
-
+import useDeleteBook from "../hooks/useDeleteBook";
 const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [books, setBooks] = useState([]);
@@ -15,8 +15,9 @@ const Dashboard = () => {
     fetchBooks();
   }, []);
 
+  const token = localStorage.getItem("token");
+  const { deleteBook, delloading, error } = useDeleteBook();
   const fetchBooks = async () => {
-    const token = localStorage.getItem("token");
     try {
       const response = await axios.get("http://localhost:3000/books", {
         headers: { Authorization: `Bearer ${token}` },
@@ -31,7 +32,17 @@ const Dashboard = () => {
       setLoading(false);
     }
   };
-
+  const bookId = books.id;
+  const handleDeleteBook = async (bookId) => {
+    const success = await deleteBook(bookId, token);
+    if (success) {
+      // Remove the deleted book from the state
+      setBooks(books.filter((book) => book.id !== bookId));
+    } else {
+      alert("Failed to delete book. Please try again.");
+    }
+  };
+  // console.log(`Book ${bookId}`);
   return (
     <div className="min-h-screen bg-gray-100 p-8">
       <div className="max-w-4xl mx-auto">
@@ -59,15 +70,29 @@ const Dashboard = () => {
             <ul className="space-y-4">
               {books.map((book) => (
                 <li key={book.id}>
-                  <Link
-                    to={`/books/${book.id}/`}
-                    className="block bg-blue-50 hover:bg-blue-100 rounded-lg p-4 transition duration-200"
+                  <div
+                    // to={`/books/${book.id}/`}
+                    className=" bg-blue-50 flex justify-between   hover:bg-blue-100 rounded-lg p-3 transition duration-200"
                   >
-                    <h3 className="text-xl font-semibold text-blue-700 mb-2">
-                      {book.name}
-                    </h3>
-                    <p className="text-gray-600">{book.description}</p>
-                  </Link>
+                    <Link to={`/books/${book.id}/`}>
+                      <h3 className="text-xl font-semibold text-blue-700 mb-2">
+                        {book.name}
+                      </h3>
+                      <p className="text-gray-600">{book.description}</p>
+                    </Link>
+
+                    <div className="bg-red-500 text-white rounded-md flex items-center justify-center px-2">
+                      <button
+                        onClick={() => {
+                          handleDeleteBook(book.id);
+                        }}
+                        disabled={delloading}
+                      >
+                        {loading ? "Deleting..." : "Delete"}
+                      </button>
+                      {error && <p>Error: {error.message}</p>}
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>

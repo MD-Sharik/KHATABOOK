@@ -5,14 +5,14 @@ import { useNavigate } from "react-router-dom";
 
 const Login = () => {
   const [email, setEmail] = useState("");
-  const [phone_number, setPhone] = useState("");
+  const [password, setPhone] = useState("");
   const navigate = useNavigate();
 
   const handleLogin = async () => {
     try {
       const response = await axios.post("http://localhost:3000/login", {
         email,
-        phone_number,
+        password,
       });
       const { userId, token } = response.data;
 
@@ -40,7 +40,7 @@ const Login = () => {
       <input
         type="text"
         placeholder="Phone"
-        value={phone_number}
+        value={password}
         onChange={(e) => setPhone(e.target.value)}
         className="p-2 border border-gray-400 rounded mb-4"
       />
